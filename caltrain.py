@@ -113,7 +113,12 @@ def loadAddresses(listings):
         # cares, right? Right? *crickets*
         dumpCache(addresses, addressCache)
         dumpCache(listings, listingCache)
+    return addresses
 
 if __name__ == '__main__':
     listings = loadListings()
     addresses = loadAddresses(listings)
+
+    # TODO: just print all the addresses for now
+    for v in addresses.values():
+        print(v['address'])
