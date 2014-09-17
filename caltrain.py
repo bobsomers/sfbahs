@@ -107,7 +107,14 @@ def loadAddresses(listings):
 
         address = scrapeAddress(url)
         if address:
-            addresses[url] = {'title': title, 'address': address}
+            # Search for the square footage
+            sqft = re.search( r'(\d{4})sqft', title, re.I)
+           
+            # Silly question, but does it matter that the title and sqft are in unicode?
+            if sqft != None:
+                addresses[url] = {'title': title, 'address': address, 'sqft': sqft.group()}
+            else:
+                addresses[url] = {'title': title, 'address': address, 'sqft': None}
 
         # This is horrendously inefficient, but Python is already slow, so who
         # cares, right? Right? *crickets*
@@ -118,7 +125,7 @@ def loadAddresses(listings):
 if __name__ == '__main__':
     listings = loadListings()
     addresses = loadAddresses(listings)
-
-    # TODO: just print all the addresses for now
+    
+    # TODO: just print all the addresses and sqft for now
     for v in addresses.values():
-        print(v['address'])
+        print(v['address'], v['sqft'])
