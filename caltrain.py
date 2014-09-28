@@ -150,11 +150,11 @@ def getDistances(org_address):
         googleUrl +='{0}+caltrain+station|'.format(dest)
     googleUrl += '&mode=driving&units=imperial'
     googleUrl += '&key={0}'.format(API_KEY)
-    #print googleUrl
+    print googleUrl
     
     # Send url request to distance api
     jsonObj = simplejson.load(urllib2.urlopen(googleUrl))
-    #print simplejson.dumps(jsonObj,indent=4)
+    print simplejson.dumps(jsonObj,indent=4)
     
     # Gather the distances to the destinations
     row = jsonObj['rows'][0]['elements']
@@ -180,10 +180,13 @@ if __name__ == '__main__':
     addresses = loadAddresses(listings)
     
     # TODO: just print all the addresses and sqft for now
-#    for v in addresses.values():
-#        print v
 
-    # Sort the addresses based on distances to caltrain stations
+    # Sort the distances to caltrain of each address first
+    for v in addresses.values():
+        sortedDist = sorted(v['distance'])
+        v['distance'] = sortedDist
+    
+    # Sort the addresses based on new sorted distances to caltrain stations
     sortedList = sorted(addresses.values(), key=lambda k: k['distance'], reverse=True)
     
     # HORRIBLY INEFFICIENT WAY TO PRINT THE URL OF THE SORTED ITEMS
@@ -192,6 +195,7 @@ if __name__ == '__main__':
         # First tuple is the shortest distance to a caltrain station
         shortest_dist = v['distance'][0]
         print "{0} to {1} caltrain station ".format(shortest_dist[1],shortest_dist[2]) 
+        #print v['distance']
         print "    {0} {1}".format(v['address'],v['sqft'])
         for i in addresses:
             if v['title'] == addresses[i]['title']:
