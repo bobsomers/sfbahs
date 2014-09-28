@@ -3,7 +3,7 @@
 # Pulls in the RSS feed of housing posts from Craigslist (with a few options),
 # scrapes each listing page for its address, and uses the Google Distance
 # Matrix API to rank them by their walking distance to major Caltrain stations.
-# AIzaSyDIe54Kx52-RdwIBxwQ07ZDUbuRs0U1AUc
+
 # TODO: Actually use the Google Distance API, lol.
 
 import feedparser
@@ -14,6 +14,7 @@ import re
 import urllib2
 import json as simplejson 
 import sys
+from operator import itemgetter
 
 # Settings:
 numBathrooms = 2
@@ -29,6 +30,8 @@ listingCache   = 'listing.cache'
 addressCache   = 'address.cache'
 distanceCache  = 'distance.cache'
 GOOGLE_API_BASE_URL = 'https://maps.googleapis.com/maps/api/distancematrix/json?origins='
+DESTINATION = re.sub(r"\s+", '+', sys.argv[1])
+API_KEY = sys.argv[2]
 
 def dumpCache(obj, path):
     with open(path, 'wb') as f:
@@ -113,12 +116,15 @@ def loadAddresses(listings):
         if address:
             # Search for the square footage
             sqft = re.search( r'(\d{4})sqft', title, re.I)
-           
+            
+            #  Call the Distance API here and return the distance
+            dist = getDistances(address)
+            
             # Silly question, but does it matter that the title and sqft are in unicode?
             if sqft != None:
-                addresses[url] = {'title': title, 'address': address, 'sqft': sqft.group()}
+                addresses[url] = {'title': title, 'address': address, 'sqft': sqft.group(), 'distance': dist}
             else:
-                addresses[url] = {'title': title, 'address': address, 'sqft': None}
+                addresses[url] = {'title': title, 'address': address, 'sqft': None, 'distance': dist}
 
         # This is horrendously inefficient, but Python is already slow, so who
         # cares, right? Right? *crickets*
@@ -127,65 +133,33 @@ def loadAddresses(listings):
     return addresses
 
 def formatAddress(addresses):
-    addressList = []
-    for v in addresses.values():
-        temp = re.sub('[.!,;-?-]', ' ',v['address'])
-        addressList.append(re.sub('\s+','+',temp)) 
-    return addressList
+    temp = re.sub('[.!,;-?-]', ' ',addresses)
+    formedAddress = re.sub('\s+','+',temp) 
+    return formedAddress
 
-def getDistances(addressList, destination, API_KEY):
-    jsonObj = loadCache(distanceCache)
-    #print destination
-    #print API_KEY
-    if jsonObj is None: 
-        result_org_address = []
-        result_rows = []
-
-        # Create first element in the json object
-        googleUrl = GOOGLE_API_BASE_URL 
-        googleUrl += '{0}|'.format(addressList[0])
-        googleUrl += '&destinations={0}'.format(destination)
-        googleUrl += '&mode=driving&units=imperial'
-        googleUrl += '&key={0}'.format(API_KEY)
-        #print googleUrl
-        jsonObj = simplejson.load(urllib2.urlopen(googleUrl))
-        
-        ''' This is really ugly and slow I know.  Would like to do 100 elements per query
-            but Google API URLs are restricted to 2000 chars and the addresses
-            are of varying lengths. So for now doing each address per query.'''
-        # TODO: Create chunking of the url query 
-        
-        # Only doing 50 at the moment (Hit my daily request quota
-        for x in addressList[1:50]: 
-            googleUrl = GOOGLE_API_BASE_URL 
-            googleUrl += '{0}|'.format(x)
-            googleUrl += '&destinations={0}'.format(destination)
-            googleUrl += '&mode=driving&units=imperial'
-            googleUrl += '&key={0}'.format(API_KEY)
-            result = simplejson.load(urllib2.urlopen(googleUrl))
-            result_org_address.append(result['origin_addresses'][0])
-            result_rows.append(result['rows'][0])
-
-        # Append all the addresses to the json object origins_address array
-        for i in result_org_address:
-            jsonObj['origin_addresses'].append(i)
-
-        # Append all the row data for each address to the json object
-        for i in result_rows:
-            jsonObj['rows'].append(i)
-        dumpCache(jsonObj, distanceCache)
+def getDistances(org_address):
+    address = formatAddress(org_address)
+    
+    googleUrl = GOOGLE_API_BASE_URL 
+    googleUrl += '{0}|'.format(address)
+    googleUrl += '&destinations={0}'.format(DESTINATION)
+    googleUrl += '&mode=driving&units=imperial'
+    googleUrl += '&key={0}'.format(API_KEY)
+    # print googleUrl
+    jsonObj = simplejson.load(urllib2.urlopen(googleUrl))
+    # print simplejson.dumps(jsonObj,indent=4)
+    if jsonObj['rows'][0]['elements'][0]['status'] == 'OK':
+        return jsonObj['rows'][0]['elements'][0]['distance']['text']
     else:
-        print simplejson.dumps(jsonObj,sort_keys=True,indent=4)
+        # NOT_FOUND or ZERO_RESULTS. Return large distance
+        return '10000.0 mi'
 
 if __name__ == '__main__':
     listings = loadListings()
     addresses = loadAddresses(listings)
-    addressList = formatAddress(addresses)
-    dest = sys.argv[1]
-    key = sys.argv[2]
-    dest = re.sub(r"\s+", '+', dest)
-    getDistances(addressList, dest, key) 
+    #getDistances(addresses, dest, key) 
     
     # TODO: just print all the addresses and sqft for now
-    #for v in addresses.values()
-    #    print(v['address'], v['sqft']) 
+    for v in addresses.values():
+        print (v['address'],v['sqft'],v['distance']) 
+    #print "%s " % addresses.values()
