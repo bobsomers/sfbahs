@@ -14,6 +14,7 @@ import re
 import urllib2
 import json as simplejson 
 import sys
+import heapq
 from operator import itemgetter
 
 # Settings:
@@ -118,13 +119,13 @@ def loadAddresses(listings):
             sqft = re.search( r'(\d{4})sqft', title, re.I)
             
             #  Call the Distance API here and return the distance
-            dist = getDistances(address)
+            (dist_val, dist_text) = getDistances(address)
             
             # Silly question, but does it matter that the title and sqft are in unicode?
             if sqft != None:
-                addresses[url] = {'title': title, 'address': address, 'sqft': sqft.group(), 'distance': dist}
+                addresses[url] = {'title': title, 'address': address, 'sqft': sqft.group(), 'distance': dist_text, 'value': dist_val}
             else:
-                addresses[url] = {'title': title, 'address': address, 'sqft': None, 'distance': dist}
+                addresses[url] = {'title': title, 'address': address, 'sqft': None, 'distance': dist_text, 'value': dist_val}
 
         # This is horrendously inefficient, but Python is already slow, so who
         # cares, right? Right? *crickets*
@@ -149,17 +150,24 @@ def getDistances(org_address):
     jsonObj = simplejson.load(urllib2.urlopen(googleUrl))
     # print simplejson.dumps(jsonObj,indent=4)
     if jsonObj['rows'][0]['elements'][0]['status'] == 'OK':
-        return jsonObj['rows'][0]['elements'][0]['distance']['text']
+        dist_val = jsonObj['rows'][0]['elements'][0]['distance']['value']
+        dist_text =  jsonObj['rows'][0]['elements'][0]['distance']['text']
+        return (dist_val, dist_text)
     else:
         # NOT_FOUND or ZERO_RESULTS. Return large distance
-        return '10000.0 mi'
+        return ('1000000', None)
 
 if __name__ == '__main__':
     listings = loadListings()
     addresses = loadAddresses(listings)
-    #getDistances(addresses, dest, key) 
     
     # TODO: just print all the addresses and sqft for now
-    for v in addresses.values():
-        print (v['address'],v['sqft'],v['distance']) 
-    #print "%s " % addresses.values()
+    newList = sorted(addresses.values(), key=lambda k: k['value'], reverse=True)
+    
+    # HORRIBLY INEFFICIENT WAY TO PRINT THE URL OF THE SORTED ITEMS
+    for v in newList:
+        print (v['distance'],v['address'],v['sqft']) 
+        for i in addresses:
+            if v['title'] == addresses[i]['title']:
+                print i
+                break
