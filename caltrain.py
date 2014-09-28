@@ -14,8 +14,6 @@ import re
 import urllib2
 import json as simplejson 
 import sys
-import heapq
-from operator import itemgetter
 
 # Settings:
 numBathrooms = 2
@@ -29,9 +27,8 @@ addressRegex   = re.compile('<div class="mapaddress">(.*)</div>')
 cityRegex      = re.compile('&amp;csz=(.*)&amp;')
 listingCache   = 'listing.cache'
 addressCache   = 'address.cache'
-distanceCache  = 'distance.cache'
 GOOGLE_API_BASE_URL = 'https://maps.googleapis.com/maps/api/distancematrix/json?origins='
-DESTINATIONS = ['sunnyvale', 'mountainview', 'palo alto', 'redwood city', \
+DESTINATIONS = ['sunnyvale', 'mountain view', 'palo alto', 'redwood city', \
                 'hillsdale', 'san mateo']
 API_KEY = sys.argv[2]
 
@@ -150,11 +147,11 @@ def getDistances(org_address):
         googleUrl +='{0}+caltrain+station|'.format(dest)
     googleUrl += '&mode=driving&units=imperial'
     googleUrl += '&key={0}'.format(API_KEY)
-    print googleUrl
+    #print googleUrl
     
     # Send url request to distance api
     jsonObj = simplejson.load(urllib2.urlopen(googleUrl))
-    print simplejson.dumps(jsonObj,indent=4)
+    #print simplejson.dumps(jsonObj,indent=4)
     
     # Gather the distances to the destinations
     row = jsonObj['rows'][0]['elements']
