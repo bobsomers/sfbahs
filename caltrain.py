@@ -22,7 +22,7 @@ numBathrooms = 2
 numBedrooms = 3
 minAsk = 2500 # in dollars
 maxAsk = 4000 # in dollars
-region = 'sby' # craigslist region, sby = south bay, pen = peninsula, etc.
+region = sys.argv[1] # craigslist region, sby = south bay, pen = peninsula, etc.
 
 # Constant-ish stuff. No need to mess with it.
 addressRegex   = re.compile('<div class="mapaddress">(.*)</div>')
@@ -31,7 +31,8 @@ listingCache   = 'listing.cache'
 addressCache   = 'address.cache'
 distanceCache  = 'distance.cache'
 GOOGLE_API_BASE_URL = 'https://maps.googleapis.com/maps/api/distancematrix/json?origins='
-DESTINATION = re.sub(r"\s+", '+', sys.argv[1])
+DESTINATIONS = ['sunnyvale', 'mountainview', 'palo alto', 'redwood city', \
+                'hillsdale', 'san mateo']
 API_KEY = sys.argv[2]
 
 def dumpCache(obj, path):
@@ -107,7 +108,6 @@ def loadAddresses(listings):
     totalListings = len(listings)
     if totalListings > 0:
         print('Scraping addresses from listings...')
-
     while len(listings) > 0:
         (url, title) = listings.popitem()
         print(u'[{0}/{1}] {2}'.format(curListing, totalListings, htmlParser.unescape(title)))
@@ -119,14 +119,11 @@ def loadAddresses(listings):
             sqft = re.search( r'(\d{4})sqft', title, re.I)
             
             #  Call the Distance API here and return the distance
-            (dist_val, dist_text) = getDistances(address)
-            
-            # Silly question, but does it matter that the title and sqft are in unicode?
+            dist = getDistances(address)
             if sqft != None:
-                addresses[url] = {'title': title, 'address': address, 'sqft': sqft.group(), 'distance': dist_text, 'value': dist_val}
+                addresses[url] = {'title': title, 'address': address, 'sqft': sqft.group(), 'distance': dist}
             else:
-                addresses[url] = {'title': title, 'address': address, 'sqft': None, 'distance': dist_text, 'value': dist_val}
-
+                addresses[url] = {'title': title, 'address': address, 'sqft': None, 'distance': dist}
         # This is horrendously inefficient, but Python is already slow, so who
         # cares, right? Right? *crickets*
         dumpCache(addresses, addressCache)
@@ -134,40 +131,69 @@ def loadAddresses(listings):
     return addresses
 
 def formatAddress(addresses):
+    # Reformat address with just spaces then with '+'
     temp = re.sub('[.!,;-?-]', ' ',addresses)
     formedAddress = re.sub('\s+','+',temp) 
     return formedAddress
 
 def getDistances(org_address):
-    address = formatAddress(org_address)
     
+    # format the input origin address
+    address = formatAddress(org_address)
+   
+    # Build the url for the distance api
     googleUrl = GOOGLE_API_BASE_URL 
     googleUrl += '{0}|'.format(address)
-    googleUrl += '&destinations={0}'.format(DESTINATION)
+    googleUrl += '&destinations='
+    for dest in DESTINATIONS:
+        dest = re.sub('\s+', '+', dest)
+        googleUrl +='{0}+caltrain+station|'.format(dest)
     googleUrl += '&mode=driving&units=imperial'
     googleUrl += '&key={0}'.format(API_KEY)
-    # print googleUrl
+    #print googleUrl
+    
+    # Send url request to distance api
     jsonObj = simplejson.load(urllib2.urlopen(googleUrl))
-    # print simplejson.dumps(jsonObj,indent=4)
-    if jsonObj['rows'][0]['elements'][0]['status'] == 'OK':
-        dist_val = jsonObj['rows'][0]['elements'][0]['distance']['value']
-        dist_text =  jsonObj['rows'][0]['elements'][0]['distance']['text']
-        return (dist_val, dist_text)
-    else:
-        # NOT_FOUND or ZERO_RESULTS. Return large distance
-        return ('1000000', None)
+    #print simplejson.dumps(jsonObj,indent=4)
+    
+    # Gather the distances to the destinations
+    row = jsonObj['rows'][0]['elements']
+    dist = []
+    j = 0
+    for i in row:
+        if i['status'] == 'OK':
+            value = i['distance']['value']
+            text = i['distance']['text']
+            station = DESTINATIONS[j]
+        else:
+            # NOT_FOUND or ZERO_RESULTS. Return large distance
+            value = '1000000'
+            text = None
+            station = DESTINATIONS[j]
+
+        dist.append((value,text,station))
+        j += 1
+    return dist
 
 if __name__ == '__main__':
     listings = loadListings()
     addresses = loadAddresses(listings)
     
     # TODO: just print all the addresses and sqft for now
-    newList = sorted(addresses.values(), key=lambda k: k['value'], reverse=True)
+#    for v in addresses.values():
+#        print v
+
+    # Sort the addresses based on distances to caltrain stations
+    sortedList = sorted(addresses.values(), key=lambda k: k['distance'], reverse=True)
     
     # HORRIBLY INEFFICIENT WAY TO PRINT THE URL OF THE SORTED ITEMS
-    for v in newList:
-        print (v['distance'],v['address'],v['sqft']) 
+    for v in sortedList:
+        print "-" * 50
+        # First tuple is the shortest distance to a caltrain station
+        shortest_dist = v['distance'][0]
+        print "{0} to {1} caltrain station ".format(shortest_dist[1],shortest_dist[2]) 
+        print "    {0} {1}".format(v['address'],v['sqft'])
         for i in addresses:
             if v['title'] == addresses[i]['title']:
-                print i
+                print "\t{0}".format(i)
                 break
